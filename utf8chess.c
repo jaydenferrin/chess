@@ -18,8 +18,9 @@ int main(void) {
 
 	while (1) {
 		print_board(game.b);
-		printf("%s's move: "
-				"                \033[16D", 
+		printf(         "                                \033[32D\r"
+				//"                                \033[32D\033[1A\r"
+				"%s's move: ", 
 				print_color(game.turn));
 		if (NULL == fgets(buf, BUF_LEN, stdin)) {
 			printf("\n");
@@ -27,6 +28,7 @@ int main(void) {
 		}
 		strtok(buf, "\n");
 		// buf has the move the player wants to make
+		printf("                                \033[32D\r");
 		if (move(&game, buf))
 			printf("\033[1A");
 		printf("\r\033[10A");
