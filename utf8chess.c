@@ -1,16 +1,12 @@
 #include "chess.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <termios.h>
 #include <signal.h>
 #include <string.h>
 
 #define BUF_LEN 64
 
 void print_board(board);
-void change_term(void);
-void reset_term(void);
 
 struct termios *orig_info = NULL;
 
@@ -19,10 +15,6 @@ int main(void) {
 	char buf[BUF_LEN];
 
 	reset(&game);
-
-//	atexit(reset_term);
-//	signal(SIGINT, exit);
-//	change_term();
 
 	while (1) {
 		print_board(game.b);
@@ -65,30 +57,3 @@ void print_board(board b) {
 		printf("%c ", 'a' + i);
 	printf("\n");
 }
-
-void change_term(void) {            
-	if (NULL == orig_info) {
-		// store original terminal state
-		orig_info = malloc(sizeof *orig_info);
-		// copy current terminal state
-		struct termios info;
-		tcgetattr(STDIN_FILENO, orig_info);
-		info = *orig_info;
-		// disable canonical mode and echo
-		info.c_lflag &= ~(ICANON | ECHO);
-		// idk lol
-		info.c_cc[VMIN] = 1;
-		info.c_cc[VTIME] = 0;
-		// set terminal state to altered state
-		tcsetattr(STDIN_FILENO, TCSANOW, &info);
-	}
-}
-
-void reset_term(void) {
-	if (NULL != orig_info) {
-		tcsetattr(STDIN_FILENO, TCSANOW, orig_info);
-		free(orig_info);
-		orig_info = NULL;
-	}
-}
-
