@@ -57,6 +57,7 @@ typedef enum {
 
 typedef struct {
 	board b;
+	int kpos[2][2];
 	color turn, check;
 	castle_state castle;
 } chess_t;

@@ -340,10 +340,10 @@ bool legal_move_exists(board *b, color turn, int kx, int ky) {
 char move(chess_t *chess_board, char *notation) {
 	// kpos stores each king's position x, y indexed by its color
 	//static color last_turn = BLACK;
-	static int kpos[][2] = {
-		{4, 7},	// white king x, y
-		{4, 0}	// black king x, y
-	};
+//	static int kpos[][2] = {
+//		{4, 7},	// white king x, y
+//		{4, 0}	// black king x, y
+//	};
 
 	//static castle_state castle = B_CASTLE_KING | B_CASTLE_QUEEN | W_CASTLE_KING | W_CASTLE_QUEEN;
 
@@ -354,7 +354,7 @@ char move(chess_t *chess_board, char *notation) {
 	chess_piece piece = {.pi = PAWN, .c = chess_board->turn};
 	int tx, ty, x, y;
 	unsigned int matches = 0;
-	int *k = kpos[piece.c];
+	int *k = chess_board->kpos[piece.c];
 	castle_state col = 0, cstate = 0;
 
 	char cch[3] = " -";
@@ -525,10 +525,12 @@ castling:
 	//_move(chess_board->b, x, y, tx, ty);
 	//last_turn = chess_board->turn;
 	chess_board->turn = swith(chess_board->turn);
-	if (incheck(chess_board->b, kpos[chess_board->turn][0], kpos[chess_board->turn][1])) {
+	if (incheck(chess_board->b, chess_board->kpos[chess_board->turn][0], 
+				chess_board->kpos[chess_board->turn][1])) {
 		chess_board->check = chess_board->turn;
 	}
-	if (!legal_move_exists(&chess_board->b, chess_board->turn, kpos[chess_board->turn][0], kpos[chess_board->turn][1])) {
+	if (!legal_move_exists(&chess_board->b, chess_board->turn, chess_board->kpos[chess_board->turn][0], 
+				chess_board->kpos[chess_board->turn][1])) {
 		if (NOCOLOR != chess_board->check) {
 			chess_board->check = NOCOLOR;
 			fprintf(stderr, "%s wins by checkmate!\n", print_color(swith(chess_board->check)));
@@ -552,6 +554,11 @@ void reset(chess_t *chess_board) {
 	chess_board->turn = WHITE;
 	chess_board->check = NOCOLOR;
 	chess_board->castle = B_CASTLE_KING | B_CASTLE_QUEEN | W_CASTLE_KING | W_CASTLE_QUEEN;
+	chess_board->kpos[0][0] = 4;
+	chess_board->kpos[0][1] = 7;
+	chess_board->kpos[1][0] = 4;
+	chess_board->kpos[1][1] = 0;
+
 }
 
 //void chess_init(chess_t *chess_board) {
