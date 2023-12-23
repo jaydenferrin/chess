@@ -22,17 +22,20 @@ int main(void) {
 				//"                                \033[32D\033[1A\r"
 				"%s's move: ", 
 				print_color(game.turn));
-		if (NULL == fgets(buf, BUF_LEN, stdin)) {
-			printf("\n");
-			return 0;
-		}
+		if (NULL == fgets(buf, BUF_LEN, stdin))
+			break;
 		strtok(buf, "\n");
 		// buf has the move the player wants to make
 		printf("                                \033[32D\r");
-		if (move(&game, buf))
+		int ret = move(&game, buf);
+		if (ret > 1)
+			break;
+		if (ret)
 			printf("\033[1A");
 		printf("\r\033[10A");
 	}
+
+	printf("\n");
 
 	return 0;
 }
