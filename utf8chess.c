@@ -13,11 +13,16 @@ struct termios *orig_info = NULL;
 int main(void) {
 	chess_t game;
 	char buf[BUF_LEN];
+	int state = 0;
 
 	reset(&game);
 
 	while (1) {
 		print_board(game.b);
+		if (state > 1) {
+			printf("\n");
+			break;
+		}
 		printf(         "                                \033[32D\r"
 				//"                                \033[32D\033[1A\r"
 				"%s's move: ", 
@@ -27,10 +32,8 @@ int main(void) {
 		strtok(buf, "\n");
 		// buf has the move the player wants to make
 		printf("                                \033[32D\r");
-		int ret = move(&game, buf);
-		if (ret > 1)
-			break;
-		if (ret)
+		state = move(&game, buf);
+		if (state)
 			printf("\033[1A");
 		printf("\r\033[10A");
 	}
