@@ -10,6 +10,20 @@
 #define CHESS_MATE 2
 #define CHESS_STALE 3
 
+typedef enum {
+	MOVE_CHECK   = 0x1,
+	MOVE_MATE    = 0x2,
+	MOVE_PROMOTE = 0x4,
+	MOVE_CASTLE  = 0x8,
+	MOVE_CAPTURE = 0x16
+} move_flags;
+
+typedef struct {
+	int x, y, tx, ty;
+	chess_p piece;
+	move_flags flags;
+} move_t;
+
 //typedef void (*intop)(int*, int);
 
 void print_piece(chess_piece);
@@ -23,7 +37,7 @@ static int abs(int in) {
 }
 
 static bool out_of_bounds(int x, int y) {
-	return (x < 0 || y < 0 || x >= BOARD_LENGTH || y >= BOARD_HEIGHT);
+	return x < 0 || y < 0 || x >= BOARD_LENGTH || y >= BOARD_HEIGHT;
 }
 
 // returns a bool if movement took a piece
@@ -187,23 +201,17 @@ static bool can_move(board b, int x, int y, int tx, int ty) {
 }
 
 static chess_p parse_piece(char in) {
-	//chess_p piece;
 	switch (in) {
 		case 'Q':
 			return QUEEN;
-			break;
 		case 'N':
 			return KNIGHT;
-			break;
 		case 'B':
 			return BISHOP;
-			break;
 		case 'R':
 			return ROOK;
-			break;
 		case 'K':
 			return KING;
-			break;
 		default:
 			fprintf(stderr, "character %c does not represent a piece\n", in);
 			return  BLANK;
@@ -214,25 +222,18 @@ char *print_p(chess_p p) {
 	switch (p) {
 		case PAWN:
 			return "pawn";
-			break;
 		case ROOK:
 			return "rook";
-			break;
 		case KNIGHT:
 			return "knight";
-			break;
 		case BISHOP:
 			return "bishop";
-			break;
 		case QUEEN:
 			return "queen";
-			break;
 		case KING:
 			return "king";
-			break;
 		default:
 			return "blank";
-			break;
 	}
 }
 
@@ -333,11 +334,255 @@ bool legal_move_exists(board *b, color turn, int kx, int ky) {
 	return false;
 }
 
+static bool disambiguation(char *disambig, char *dest, int *x, int *y) {
+	if (*disambig == 'x' && disambig + 1 == dest)
+		return true;
+	*y = -1;
+	*x = *disambig - 'a';
+	if (*x < 0) {
+		*x = -1;
+		*y = BOARD_HEIGHT - (*disambig - '0');
+	}
+	if (((*x >= BOARD_LENGTH || *x < 0) && -1 == *y) || ((*y >= BOARD_HEIGHT || *y < 0) && -1 == *x))
+		return false;
+	if (++disambig == dest)
+		return true;
+	if (*disambig == 'x' && disambig + 1 == dest)
+		return true;
+	// the next character is part of the disambiguation
+	// guaranteed to be y
+	if (*y != -1)
+		return false;
+	*y = BOARD_HEIGHT - (*disambig - '0');
+	if (*y >= BOARD_HEIGHT || *y < 0)
+		return false;
+	if (++disambig == dest)
+		return true;
+	if (*disambig == 'x' && disambig + 1 == dest)
+		return true;
+	return false;
+}
+
+static bool parse_flag(char flag, move_t *move) {
+	switch (flag) {
+		case '+':
+			move->flags |= MOVE_CHECK;
+			return true;
+		case '#':
+			move->flags |= MOVE_MATE;
+			return true;
+		default:
+			return false;
+	}
+}
+
+/*
+ * This function parses a movement string into a move type,
+ * but makes no checks if the move is possible
+ */
+static bool parse_movement(char *notation, color turn, move_t *move, char *promote) {
+	size_t length = strlen(notation);
+	move->flags = 0;
+	move->x = -1;
+	move->y = -1;
+	if (parse_flag(notation[length - 1], move))
+		length--;
+	if (*notation == '0' || *notation == 'o' || *notation == 'O') {
+		char cch[3] = " -";
+		cch[0] = *notation;
+		//castb = true;
+		move->piece = KING;
+		int cnum = 1;
+		char *not = notation;
+		while (strncmp(not += 2, cch, 2) == 0 && ++cnum < 2);
+		if ((cnum * 2) + 1 != length || *not != *cch)
+			return false;
+		
+		// cnum is 1 if kingside, 2 if queenside
+		move->tx = (cnum == 2) ? 2 : BOARD_LENGTH - 2;
+		move->ty = (turn == BLACK) ? 0 : BOARD_HEIGHT - 1;
+		move->x = 4;
+		move->y = move->ty;
+		move->flags |= MOVE_CASTLE;
+		return true;
+	}
+
+	char *dest = notation + (length - 2);
+	char *disambig = notation;
+	promote = NULL;
+
+	if (isupper(dest[1])) {	// promoting a pawn
+		promote = dest + 1;
+		dest--;
+		move->flags |= MOVE_PROMOTE;
+	}
+
+	if (isupper(*notation)) {
+		move->piece = parse_piece(*notation);
+		disambig++;
+	}
+
+	move->ty = 8 - (dest[1] - '0');
+	move->tx = *dest - 'a';
+	if (move->tx >= 8 || move->tx < 0 || move->ty >= 8 || move->ty < 0)
+		return false;
+
+	if (disambig != dest && !disambiguation(disambig, dest, &(move->x), &(move->y)))
+		return false;
+	return true;
+}
+
+//char *print_p(chess_p piece) {
+//	switch (piece) {
+//		case PAWN:
+//			return "pawn";
+//		case ROOK:
+//			return "rook";
+//		case KNIGHT:
+//			return "knight";
+//		case BISHOP:
+//			return "bishop";
+//		case QUEEN:
+//			return "queen";
+//		case KING:
+//			return "king";
+//		default:
+//			return "blank";
+//	}
+//}
+
+static bool find_x_y(chess_t *chess_board, move_t *move) {
+	if (move->x > -1 && move->y > -1)
+		return true;
+	int matches = 0;
+	for (int i = 0; i < BOARD_HEIGHT; ++i) {
+		for (int j = 0; j < BOARD_LENGTH; ++j) {
+			// check if this piece matches the piece we are trying to move
+			if (!((chess_board->b)[i][j].pi == move->piece &&
+			      (chess_board->b)[i][j].c == chess_board->turn))
+				continue;
+			// check if this piece can move to the position we are trying to move to 
+			if (!can_move(chess_board->b, j, i, move->tx, move->ty))
+				continue;
+			// check if this piece matches given position constraints, if any were given
+			if ((move->x > -1 && j != move->x) || (move->y > -1 && i != move->y))
+				continue;
+			matches++;
+			// assume this is the right piece
+			move->x = j;
+			move->y = i;
+		}
+	}
+	if (matches != 1)
+		return false;
+	return true;
+}
+
+static bool promotion(board b, move_t *move, char* promote) {
+	if (NULL == promote)
+		return false;
+	chess_p prom = parse_piece(*promote);
+	if (BLANK == prom)
+		return false;
+	b[move->ty][move->tx].pi = prom;
+	return true;
+}
+
+static bool test_move(chess_t *chess_board, move_t *move, board buf, char *promote, castle_state *state) {
+	castle_state col = (chess_board->turn == WHITE) ? W_CASTLE_QUEEN : B_CASTLE_QUEEN;
+	if (move->tx != 0)
+		col *= 2;
+	// one can castle if and only if
+	// 1: neither the king nor the rook castling has been moved
+	// 2: the line is clear between them
+	// 3: the king is not in check
+	if ((move->flags & ~MOVE_CASTLE) &&
+			((chess_board->castle & col) == 0 ||
+			!check_line(chess_board->b, move->x, move->y, move->tx, move->ty) || 
+			NOCOLOR != chess_board->check))
+		return false;
+	if ((move->flags & ~MOVE_PROMOTE) && move->piece != PAWN &&
+			move->ty != (BOARD_HEIGHT - 1) * swith(chess_board->turn))
+		return false;
+	memcpy(*buf, *chess_board->b, sizeof chess_board->b);
+	// make the move on the temporary board
+	bool taken = _move(buf, move->x, move->y, move->tx, move->ty);
+	if ((move->flags & ~MOVE_CAPTURE) && !taken)
+		return false;
+	int kcopy[2];
+	memcpy(kcopy, chess_board->kpos[chess_board->turn], sizeof kcopy);
+	castle_state cstate = 0;
+	switch (move->piece) {
+		case ROOK:
+			castle_state tstate = (chess_board->turn == WHITE) ? W_CASTLE_QUEEN : B_CASTLE_QUEEN;
+			tstate *= (move->x == 0) ? 1 : 2;
+			cstate |= tstate;
+			break;
+		case KING:
+			// update king's position 
+			kcopy[0] = move->tx;
+			kcopy[1] = move->ty;
+			cstate = (chess_board->turn == WHITE) ? W_CASTLE_QUEEN : B_CASTLE_QUEEN;
+			cstate |= cstate * 2;
+			break;
+		default:
+			break;
+	}
+	if (incheck(buf, kcopy[0], kcopy[1]))
+		return false;
+	if (move->flags & ~MOVE_CASTLE) {
+		// we are castling, move the rook
+		castle_state tstate = (chess_board->turn == WHITE) ? W_CASTLE_QUEEN : B_CASTLE_QUEEN;
+		int x = (tstate == col) ? 0 : BOARD_LENGTH - 1;
+		int tx = (tstate == col) ? 3 : BOARD_LENGTH - 3;
+		_move(buf, x, move->y, tx, move->ty);
+	}
+	*state = cstate;
+	if (move->flags & ~MOVE_PROMOTE)
+		return promotion(buf, move, promote);
+	return true;
+}
+
+char move(chess_t *chess_board, char *notation) {
+	move_t move;
+	char *promote = NULL;
+	if (!parse_movement(notation, chess_board->turn, &move, promote)) {
+		fprintf(stderr, "notation syntax error: %s\n", notation);
+		return CHESS_ERR;
+	}
+	if (!find_x_y(chess_board, &move)) {
+		fprintf(stderr, "ambiguous input or no piece can achieve %s\n", notation);
+		return CHESS_ERR;
+	}
+	board tmp_b;
+	castle_state cstate;
+	if (!test_move(chess_board, &move, tmp_b, promote, &cstate)) {
+		fprintf(stderr, "unable to make %s\n", notation);
+		return CHESS_ERR;
+	}
+	memcpy(*chess_board->b, *tmp_b, sizeof chess_board->b);
+	chess_board->castle &= ~cstate;
+	chess_board->turn = swith(chess_board->turn);
+	chess_board->check = NOCOLOR;
+	if (incheck(chess_board->b, chess_board->kpos[chess_board->turn][0], 
+				chess_board->kpos[chess_board->turn][1])) {
+		chess_board->check = chess_board->turn;
+	}
+	if (legal_move_exists(&chess_board->b, 
+				chess_board->turn, 
+				chess_board->kpos[chess_board->turn][0], 
+				chess_board->kpos[chess_board->turn][1])) {
+		return (NOCOLOR == chess_board->check) ? CHESS_NORMAL : CHESS_CHECK;
+	}
+	// no legal move exists
+	return (NOCOLOR == chess_board->check) ? CHESS_STALE : CHESS_MATE;
+}
+
 // returns -1 if error,
 // 0 if normal
 // 1 if in check
 // 2 if checkmate
-char move(chess_t *chess_board, char *notation) {
+char unmove(chess_t *chess_board, char *notation) {
 	// kpos stores each king's position x, y indexed by its color
 	//static color last_turn = BLACK;
 //	static int kpos[][2] = {
