@@ -515,7 +515,8 @@ static size_t what_can_attack_me(board b, color turn, int x, int y, int enemies[
 			// position, that position is not worth investigating, since
 			// that position is either out of bounds or our own piece
 			continue;
-		if (BLANK != b[ty][tx].pi && KNIGHT != b[ty][tx].pi && PAWN != b[ty][tx].pi && KING != b[ty][tx].pi) {
+		chess_p found = b[ty][tx].pi;
+		if (QUEEN == found || (BISHOP == found && tx != x && ty != y) || (ROOK == found && (tx == x || ty == y))) {
 			enemies[e][0] = tx;
 			enemies[e][1] = ty;
 			e++;
