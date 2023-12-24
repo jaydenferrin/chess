@@ -33,9 +33,11 @@ int main(void) {
 		// buf has the move the player wants to make
 		printf("                                \033[32D\r");
 		state = move(&game, buf);
+#ifndef DEBUG
 		if (state)
 			printf("\033[1A");
 		printf("\r\033[10A");
+#endif
 	}
 
 	printf("\n");
