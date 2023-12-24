@@ -24,10 +24,8 @@ typedef struct {
 	move_flags flags;
 } move_t;
 
-void print_piece(chess_piece);
-void rm_phantoms(board, int, int);
-
-bool check[] = {false, false};
+static void print_piece(chess_piece);
+static void rm_phantoms(board, int, int);
 
 static int abs(int in) {
 	return (in < 0) ? -in : in;
@@ -50,14 +48,11 @@ static bool _move(board b, int x, int y, int tx, int ty) {
 			// creating a phantom pawn when moving forward 2
 			b[ty + behind][tx].pi = F_PAWN;
 			b[ty + behind][tx].c = piece.c;
-			goto rm;
-		}
-		if (prev.pi == F_PAWN) {
+		} else if (prev.pi == F_PAWN) {
 			b[ty + behind][tx].pi = BLANK;
 			b[ty + behind][tx].c = WHITE;
 		}
 	}
-rm:
 	rm_phantoms(b, tx, ty + behind);
 	return ret;
 }
@@ -74,7 +69,7 @@ static bool check_line(const board b, int fromx, int fromy, int tox, int toy) {
 	return check_line(b, fromx, fromy, tox, toy);
 }
 
-static bool can_move(board b, int x, int y, int tx, int ty) {
+static bool can_move_minimal(board b, int x, int y, int tx, int ty) {
 	// check if this movement is out of bounds
 	if (out_of_bounds(tx, ty)) {
 		return false;
@@ -90,6 +85,14 @@ static bool can_move(board b, int x, int y, int tx, int ty) {
 	}
 	if (p.pi == BLANK)
 		return false;
+	return true;
+}
+
+static bool can_move(board b, int x, int y, int tx, int ty) {
+	if (!can_move_minimal(b, x, y, tx, ty))
+		return false;
+
+	chess_piece p = b[y][x];
 
 	int diffx = abs(tx - x);
 	int diffy = abs(ty - y);
@@ -170,7 +173,7 @@ static chess_p parse_piece(char in) {
 	}
 }
 
-char *print_p(chess_p p) {
+static char *print_p(chess_p p) {
 	switch (p) {
 		case PAWN:
 			return "pawn";
@@ -189,7 +192,7 @@ char *print_p(chess_p p) {
 	}
 }
 
-void print_piece(chess_piece piece) {
+static void print_piece(chess_piece piece) {
 #define fff_print(color, name) printf("%s %s", (color == WHITE) ? "white" : "black", name)
 	switch (piece.pi) {
 		case PAWN:
@@ -217,7 +220,7 @@ void print_piece(chess_piece piece) {
 #undef fff_print
 }
 
-bool incheck(board b, int kx, int ky) {
+static bool incheck(board b, int kx, int ky) {
 	for (int i = 0; i < BOARD_HEIGHT; i++) {
 		for (int j = 0; j < BOARD_LENGTH; j++) {
 			if (can_move(b, j, i, kx, ky))
@@ -227,7 +230,7 @@ bool incheck(board b, int kx, int ky) {
 	return false;
 }
 
-void rm_phantoms(board b, int x, int y) {
+static void rm_phantoms(board b, int x, int y) {
 	for (int i = 0; i < BOARD_HEIGHT; i++) {
 		for (int j = 0; j < BOARD_LENGTH; j++) {
 			if (j == x && i == y) continue;
@@ -238,53 +241,6 @@ void rm_phantoms(board b, int x, int y) {
 		}
 	}	
 
-}
-
-bool legal_move_exists_old(board b, color turn, int kx, int ky, bool check) {
-	board tmp;
-	for (int y = 0; y < BOARD_HEIGHT; y++) {
-		for (int x = 0; x < BOARD_LENGTH; x++) {
-			if (b[y][x].pi == BLANK || b[y][x].c != turn)
-				continue;
-			for (int ty = 0; ty < BOARD_HEIGHT; ty++) {
-				for (int tx = 0; tx < BOARD_LENGTH; tx++) {
-					if (b[ty][tx].c == turn && b[ty][tx].pi != BLANK)
-						continue;
-					if (!can_move(b, x, y, tx, ty))
-						continue;
-					int kingx = kx, kingy = ky;
-					if (kx == x && ky == y) {
-						kingx = tx;
-						kingy = ty;
-					}
-					memcpy(*tmp, *b, sizeof(board));
-					_move(tmp, x, y, tx, ty);
-					if (!incheck(tmp, kingx, kingy))
-						return true;
-				}
-			}
-		}
-	}
-	return false;
-}
-
-static bool can_move_minimal(board b, int x, int y, int tx, int ty) {
-	// check if this movement is out of bounds
-	if (out_of_bounds(tx, ty)) {
-		return false;
-	}
-	// check if the target is the same as the starting position
-	if (tx == x && ty == y) {
-		return false;
-	}
-	chess_piece p = b[y][x];
-	// check for friendly fire
-	if (p.c == b[ty][tx].c && (b[ty][tx].pi != BLANK && b[ty][tx].pi != F_PAWN)) {
-		return false;
-	}
-	if (p.pi == BLANK)
-		return false;
-	return true;
 }
 
 /*
@@ -393,7 +349,7 @@ static bool horse_movement(board b, int dir, int x, int y, int *tx, int *ty, int
 /*
  * returns true if it can keep going, false if its options have been exhasted
  */
-bool check_piece_movement(board b, chess_piece p, int *dir, int x, int y, int *tx, int *ty, int *iterations) {
+static bool check_piece_movement(board b, chess_piece p, int *dir, int x, int y, int *tx, int *ty, int *iterations) {
 	bool ret = false;
 	switch (p.pi) {
 		case PAWN:
