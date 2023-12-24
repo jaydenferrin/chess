@@ -24,12 +24,9 @@ typedef struct {
 	move_flags flags;
 } move_t;
 
-//typedef void (*intop)(int*, int);
-
 void print_piece(chess_piece);
 void rm_phantoms(board, int, int);
 
-//color chess_turn = WHITE;
 bool check[] = {false, false};
 
 static int abs(int in) {
@@ -45,8 +42,6 @@ static bool _move(board b, int x, int y, int tx, int ty) {
 	int behind = ((y < ty) ? -1 : 1);
 	chess_piece piece = b[y][x], prev = b[ty][tx];
 	bool ret = prev.pi != BLANK;
-//	if (piece.pi == BLANK || (b[ty][tx].c == piece.c && b[ty][tx].pi != BLANK))
-//		return false;
 	b[ty][tx] = piece;
 	b[y][x].pi = BLANK;
 	b[y][x].c = WHITE;
@@ -61,42 +56,17 @@ static bool _move(board b, int x, int y, int tx, int ty) {
 			b[ty + behind][tx].pi = BLANK;
 			b[ty + behind][tx].c = WHITE;
 		}
-//		if (abs(y - ty) == 1 && (b[y + behind][x].pi == F_PAWN && b[y + behind][x].c == piece.c)) {
-//			b[y + behind][x].pi = BLANK;
-//			b[y + behind][x].c = WHITE;
-//		}
-//		if (prev.pi == PAWN && b[ty - behind][tx].pi == F_PAWN) {
-//			b[ty - behind][tx].pi = BLANK;
-//			b[ty - behind][tx].c = WHITE;
-//			return;
-//		}
 	}
 rm:
 	rm_phantoms(b, tx, ty + behind);
 	return ret;
-
-//	printf("from %d, %d: ", x, y);
-//	print_piece(b[y][x]);
-//	printf("to %d, %d: ", tx, ty);
-//	print_piece(b[ty][tx]);
-//	printf("\n");
-
-//	return true;
 }
-
-//static void nop(int *n, int no) {}
-//
-//static void inc(int *x, int op) {
-//	*x += op;
-//}
 
 // returns true if there are no obstructions between (fromx, fromy) and (tox, toy) 
 // in board b, changing x and y by their respective functions;
 static bool check_line(const board b, int fromx, int fromy, int tox, int toy) {
-	//xop(&fromx, (fromx < tox) ? 1 : -1);
 	fromx += (fromx == tox) ? 0 : ((fromx < tox) ? 1 : -1);
 	fromy += (fromy == toy) ? 0 : ((fromy < toy) ? 1 : -1);
-	//yop(&fromy, (fromy < toy) ? 1 : -1);
 	if (fromx == tox && fromy == toy) 
 		return true;
 	if (b[fromy][fromx].pi != BLANK)
@@ -105,18 +75,17 @@ static bool check_line(const board b, int fromx, int fromy, int tox, int toy) {
 }
 
 static bool can_move(board b, int x, int y, int tx, int ty) {
-//#define pawn_print(msg) fprintf(stderr, "ERROR: pawn at %d, %d, moving to %d, %d %s\n", x, y, tx, ty, msg)
+	// check if this movement is out of bounds
 	if (out_of_bounds(tx, ty)) {
-		//fprintf(stderr, "ERROR: out of bounds\n");
 		return false;
 	}
+	// check if the target is the same as the starting position
 	if (tx == x && ty == y) {
-		//fprintf(stderr, "ERROR: didn't move\n");
 		return false;
 	}
 	chess_piece p = b[y][x];
+	// check for friendly fire
 	if (p.c == b[ty][tx].c && (b[ty][tx].pi != BLANK && b[ty][tx].pi != F_PAWN)) {
-		//fprintf(stderr, "ERROR: friendly fire\n");
 		return false;
 	}
 	if (p.pi == BLANK)
@@ -124,49 +93,35 @@ static bool can_move(board b, int x, int y, int tx, int ty) {
 
 	int diffx = abs(tx - x);
 	int diffy = abs(ty - y);
-//	intop xo, yo;
 	switch (p.pi) {
 		case PAWN:
 			if ((y <= ty && p.c == WHITE) || (ty <= y && p.c == BLACK)) {
-//				pawn_print("moving backwards");
 				return false;
 			}
-			//int dy = ty - y;
 			if (diffx > 1) {
-//				pawn_print("too far x dir");
 				return false;
 			}
 			if (diffy > 2) {
-//				pawn_print("too far forwards");
 				return false;
 			}
 			int origpos = 1 + swith(p.c) * 5;
 			if (diffy == 2 && (y != origpos || diffx > 0)) {
-//				pawn_print("not in origpos");
-//				printf("%d\n", origpos);
 				return false;
 			}
 			if (diffx == 0 && (b[ty][tx].pi != BLANK)) {
-//				pawn_print("something in the way");
 				return false;
 			}
 			if (diffx == 0 && diffy == 2 && !check_line(b, x, y, tx, ty)) {
-//				pawn_print("something in the way 2");
 				return false;
 			}
 			if (diffx == 1 && (b[ty][tx].pi == BLANK && !(b[ty][tx].pi == F_PAWN && b[ty][tx].c != p.c))) {
-//				pawn_print("nothing to take");
 				return false;
 			}
-//			pawn_print("has made it");
 			return true;
 			break;
 		case ROOK:
 			if (diffy > 0 && diffx > 0)
 				return false;
-			//intop xo, yo;
-//			xo = (diffx > 0) ? inc : nop;
-//			yo = (diffy > 0) ? inc : nop;
 			return check_line(b, x, y, tx, ty);
 			break;
 		case KNIGHT:
@@ -186,9 +141,6 @@ static bool can_move(board b, int x, int y, int tx, int ty) {
 		case QUEEN:
 			if (diffy != diffx && (diffy > 0 && diffx > 0))
 				return false;
-			//intop xo, yo;
-//			xo = (diffx > 0) ? inc : nop;
-//			yo = (diffy > 0) ? inc : nop;
 			return check_line(b, x, y, tx, ty);
 			break;
 		case KING:
@@ -319,9 +271,6 @@ bool legal_move_exists(board *b, color turn, int kx, int ky) {
 					if (kx == x && ky == y) {
 						kingx = tx;
 						kingy = ty;
-//						if (can_move(*b, x, y, tx, ty) && !incheck_no_buf(*b, tx, ty, x, y, tx, ty))
-//							return true;
-//						continue;
 					}
 					memcpy(*tmp, **b, sizeof *b);
 					_move(tmp, x, y, tx, ty);
@@ -432,25 +381,6 @@ static bool parse_movement(char *notation, color turn, move_t *move, char *promo
 		return false;
 	return true;
 }
-
-//char *print_p(chess_p piece) {
-//	switch (piece) {
-//		case PAWN:
-//			return "pawn";
-//		case ROOK:
-//			return "rook";
-//		case KNIGHT:
-//			return "knight";
-//		case BISHOP:
-//			return "bishop";
-//		case QUEEN:
-//			return "queen";
-//		case KING:
-//			return "king";
-//		default:
-//			return "blank";
-//	}
-//}
 
 static bool find_x_y(chess_t *chess_board, move_t *move) {
 	if (move->x > -1 && move->y > -1)
@@ -596,17 +526,6 @@ char move(chess_t *chess_board, char *notation) {
 // 1 if in check
 // 2 if checkmate
 char unmove(chess_t *chess_board, char *notation) {
-	// kpos stores each king's position x, y indexed by its color
-	//static color last_turn = BLACK;
-//	static int kpos[][2] = {
-//		{4, 7},	// white king x, y
-//		{4, 0}	// black king x, y
-//	};
-
-	//static castle_state castle = B_CASTLE_KING | B_CASTLE_QUEEN | W_CASTLE_KING | W_CASTLE_QUEEN;
-
-//	static color cheek = -1;	// who's in check
-
 	int length = strlen(notation);
 	char *dest, *disambig, *promote = NULL;
 	chess_piece piece = {.pi = PAWN, .c = chess_board->turn};
@@ -618,7 +537,6 @@ char unmove(chess_t *chess_board, char *notation) {
 	char cch[3] = " -";
 	if (*notation == '0' || *notation == 'o' || *notation == 'O') {
 		cch[0] = *notation;
-		//castb = true;
 		piece.pi = KING;
 		int cnum = 1;
 		char *not = notation;
@@ -627,7 +545,6 @@ char unmove(chess_t *chess_board, char *notation) {
 			fprintf(stderr, "invalid input %s\n", notation);
 			return CHESS_ERR;
 		}
-		//fprintf(stderr, "%d reps\n", cnum);
 
 		col = (piece.c == WHITE) ? W_CASTLE_QUEEN : B_CASTLE_QUEEN;
 		// cnum is 1 if kingside, 2 if queenside
@@ -649,7 +566,6 @@ char unmove(chess_t *chess_board, char *notation) {
 		}
 		goto castling;
 	}
-	//length = strlen(notation);
 	dest = notation + (length - 2);
 	disambig = notation;
 	promote = NULL;
@@ -658,29 +574,17 @@ char unmove(chess_t *chess_board, char *notation) {
 		dest--;	// promoting a pawn
 	}
 
-	//piece = {.pi = PAWN, .c = chess_board->turn};
-	//piece.c = chess_board->turn;
 	if (isupper(*notation)) {
 		piece.pi = parse_piece(*notation);
 		disambig++;
 	}
-//	if (*disambig == 'x') disambig++;
-
-//	print_piece(piece);
-//	printf("\n");
 
 	tx = *dest - 'a';
 	ty = 8 - (dest[1] - '0');
-//	printf("moving to %d, %d\n", tx, ty);
 	for (int i = 0; i < BOARD_HEIGHT; i++) {
 		for (int j = 0; j < BOARD_LENGTH; j++) {
-			//if (can_move(chess_board->b, j, i, k[0], k[1]) && !check[chess_board->turn])
-			//	check[chess_board->turn] = true;
 			if (!((chess_board->b)[i][j].pi == piece.pi && (chess_board->b)[i][j].c == piece.c))
 				continue;
-//			printf("found ");
-//			print_piece(piece);
-//			printf(" at %d, %d\n", j, i);
 			if (can_move(chess_board->b, j, i, tx, ty)) {
 				matches++;
 				if (matches > 1 && disambig != dest) {
@@ -769,7 +673,7 @@ castling:
 			fprintf(stderr, "%c does not refer to a piece\n", *promote);
 			return CHESS_ERR;
 		}
-		if (ty != ((piece.c == BLACK) ? BOARD_HEIGHT - 1 : 0)) {//(BOARD_HEIGHT - 1) - (piece.c * (BOARD_HEIGHT - 1))) {
+		if (ty != ((piece.c == BLACK) ? BOARD_HEIGHT - 1 : 0)) {
 			fprintf(stderr, "cannot promote pawn at %c%c\n", dest[0], dest[1]);
 			return CHESS_ERR;
 		}
@@ -779,9 +683,6 @@ castling:
 	// if we get here we are not in check and the movement passed all other tests
 	memcpy(*chess_board->b, *tmp, sizeof chess_board->b);
 	chess_board->castle &= ~cstate;
-	//rm_phantoms(chess_board->b);
-	//_move(chess_board->b, x, y, tx, ty);
-	//last_turn = chess_board->turn;
 	chess_board->turn = swith(chess_board->turn);
 	if (incheck(chess_board->b, chess_board->kpos[chess_board->turn][0], 
 				chess_board->kpos[chess_board->turn][1])) {
@@ -818,21 +719,6 @@ void reset(chess_t *chess_board) {
 	chess_board->kpos[1][1] = 0;
 
 }
-
-//void chess_init(chess_t *chess_board) {
-//	board tmp = BOARD_START(WHITE);
-//	memcpy(*(chess_board->b), *tmp, sizeof chess_board->);
-//	chess_board->turn = WHITE;
-//	chess_board->castle = B_CASTLE_KING | B_CASTLE_QUEEN | W_CASTLE_KING | W_CASTLE_QUEEN;
-//}
-
-//board chess_get_board(chess_t *chess_board) {
-//	return chess_board->b;
-//}
-//
-//color turn(chess_t *chess_board) {
-//	return chess_board->turn;
-//}
 
 char *print_color(color c) {
 	switch (c) {
