@@ -385,6 +385,7 @@ static bool parse_movement(char *notation, color turn, move_t *move, char *promo
 	move->flags = 0;
 	move->x = -1;
 	move->y = -1;
+	move->piece = PAWN;
 	if (parse_flag(notation[length - 1], move))
 		length--;
 	if (*notation == '0' || *notation == 'o' || *notation == 'O') {
@@ -488,7 +489,7 @@ static bool promotion(board b, move_t *move, char* promote) {
 	return true;
 }
 
-static bool test_move(chess_t *chess_board, move_t *move, board buf, char *promote, castle_state *state) {
+static bool test_move(chess_t *chess_board, move_t *move, board buf, int kcopy[2], char *promote, castle_state *state) {
 	castle_state col = (chess_board->turn == WHITE) ? W_CASTLE_QUEEN : B_CASTLE_QUEEN;
 	if (move->tx != 0)
 		col *= 2;
@@ -496,21 +497,20 @@ static bool test_move(chess_t *chess_board, move_t *move, board buf, char *promo
 	// 1: neither the king nor the rook castling has been moved
 	// 2: the line is clear between them
 	// 3: the king is not in check
-	if ((move->flags & ~MOVE_CASTLE) &&
+	if ((move->flags & MOVE_CASTLE) &&
 			((chess_board->castle & col) == 0 ||
 			!check_line(chess_board->b, move->x, move->y, move->tx, move->ty) || 
 			NOCOLOR != chess_board->check))
 		return false;
-	if ((move->flags & ~MOVE_PROMOTE) && move->piece != PAWN &&
+	if ((move->flags & MOVE_PROMOTE) && move->piece != PAWN &&
 			move->ty != (BOARD_HEIGHT - 1) * swith(chess_board->turn))
 		return false;
 	memcpy(*buf, *chess_board->b, sizeof chess_board->b);
 	// make the move on the temporary board
 	bool taken = _move(buf, move->x, move->y, move->tx, move->ty);
-	if ((move->flags & ~MOVE_CAPTURE) && !taken)
+	if ((move->flags & MOVE_CAPTURE) && !taken)
 		return false;
-	int kcopy[2];
-	memcpy(kcopy, chess_board->kpos[chess_board->turn], sizeof kcopy);
+	memcpy(kcopy, chess_board->kpos[chess_board->turn], 2 * sizeof *kcopy);
 	castle_state cstate = 0;
 	switch (move->piece) {
 		case ROOK:
@@ -530,7 +530,7 @@ static bool test_move(chess_t *chess_board, move_t *move, board buf, char *promo
 	}
 	if (incheck(buf, kcopy[0], kcopy[1]))
 		return false;
-	if (move->flags & ~MOVE_CASTLE) {
+	if (move->flags & MOVE_CASTLE) {
 		// we are castling, move the rook
 		castle_state tstate = (chess_board->turn == WHITE) ? W_CASTLE_QUEEN : B_CASTLE_QUEEN;
 		int x = (tstate == col) ? 0 : BOARD_LENGTH - 1;
@@ -538,7 +538,7 @@ static bool test_move(chess_t *chess_board, move_t *move, board buf, char *promo
 		_move(buf, x, move->y, tx, move->ty);
 	}
 	*state = cstate;
-	if (move->flags & ~MOVE_PROMOTE)
+	if (move->flags & MOVE_PROMOTE)
 		return promotion(buf, move, promote);
 	return true;
 }
@@ -556,26 +556,39 @@ char move(chess_t *chess_board, char *notation) {
 	}
 	board tmp_b;
 	castle_state cstate;
-	if (!test_move(chess_board, &move, tmp_b, promote, &cstate)) {
+	int kcopy[2];
+	if (!test_move(chess_board, &move, tmp_b, kcopy, promote, &cstate)) {
 		fprintf(stderr, "unable to make %s\n", notation);
 		return CHESS_ERR;
 	}
+	color turn  = swith(chess_board->turn);
+	color check = incheck(tmp_b, chess_board->kpos[turn][0], chess_board->kpos[turn][1])
+		? turn
+		: NOCOLOR;
+	char ret = CHESS_NORMAL;
+	if (legal_move_exists(&tmp_b, turn, chess_board->kpos[turn][0], chess_board->kpos[turn][1])) {
+		// if the user says this move results in mate, return error
+		if (move.flags & MOVE_MATE)
+			return CHESS_ERR;
+		// if the user says this move results in check and it does not, return error
+		if (NOCOLOR == check && move.flags & MOVE_CHECK)
+			return CHESS_ERR;
+		if (NOCOLOR != check)
+			ret = CHESS_CHECK;
+	} else {
+		// no legal move exists
+		if (NOCOLOR == check && move.flags & MOVE_MATE)
+			return CHESS_ERR;
+		ret = (NOCOLOR == check) ? CHESS_STALE : CHESS_MATE;
+	}
+
 	memcpy(*chess_board->b, *tmp_b, sizeof chess_board->b);
+	chess_board->kpos[chess_board->turn][0] = kcopy[0];
+	chess_board->kpos[chess_board->turn][1] = kcopy[1];
 	chess_board->castle &= ~cstate;
-	chess_board->turn = swith(chess_board->turn);
-	chess_board->check = NOCOLOR;
-	if (incheck(chess_board->b, chess_board->kpos[chess_board->turn][0], 
-				chess_board->kpos[chess_board->turn][1])) {
-		chess_board->check = chess_board->turn;
-	}
-	if (legal_move_exists(&chess_board->b, 
-				chess_board->turn, 
-				chess_board->kpos[chess_board->turn][0], 
-				chess_board->kpos[chess_board->turn][1])) {
-		return (NOCOLOR == chess_board->check) ? CHESS_NORMAL : CHESS_CHECK;
-	}
-	// no legal move exists
-	return (NOCOLOR == chess_board->check) ? CHESS_STALE : CHESS_MATE;
+	chess_board->turn = turn;
+	chess_board->check = check;
+	return ret;
 }
 
 // returns -1 if error,
