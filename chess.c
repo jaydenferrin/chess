@@ -217,25 +217,10 @@ void print_piece(chess_piece piece) {
 #undef fff_print
 }
 
-bool incheck(board b, int x, int y) {
+bool incheck(board b, int kx, int ky) {
 	for (int i = 0; i < BOARD_HEIGHT; i++) {
 		for (int j = 0; j < BOARD_LENGTH; j++) {
-			if (can_move(b, j, i, x, y))
-				return true;
-		}
-	}
-	return false;
-}
-
-bool incheck_no_buf(board b, int kx, int ky, int fromx, int fromy, int tox, int toy) {
-	for (int i = 0; i < BOARD_HEIGHT; i++) {
-		for (int j = 0; j < BOARD_LENGTH; j++) {
-			int x = j, y = i;
-			if (x == fromx && y == fromy) {
-				x = tox;
-				y = toy;
-			}
-			if (can_move(b, x, y, kx, ky))
+			if (can_move(b, j, i, kx, ky))
 				return true;
 		}
 	}
