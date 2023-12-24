@@ -712,9 +712,9 @@ static bool parse_movement(char *notation, color turn, move_t *move, char *promo
 	return true;
 }
 
-static bool find_x_y(chess_t *chess_board, move_t *move) {
+static int find_x_y(chess_t *chess_board, move_t *move) {
 	if (move->x > -1 && move->y > -1)
-		return true;
+		return 1;
 	int matches = 0;
 	for (int i = 0; i < BOARD_HEIGHT; ++i) {
 		for (int j = 0; j < BOARD_LENGTH; ++j) {
@@ -734,9 +734,7 @@ static bool find_x_y(chess_t *chess_board, move_t *move) {
 			move->y = i;
 		}
 	}
-	if (matches != 1)
-		return false;
-	return true;
+	return matches;
 }
 
 static bool promotion(board b, move_t *move, char* promote) {
@@ -814,8 +812,13 @@ char move(chess_t *chess_board, char *notation) {
 		fprintf(stderr, "notation syntax error: %s\n", notation);
 		return CHESS_ERR;
 	}
-	if (!find_x_y(chess_board, &move)) {
-		fprintf(stderr, "ambiguous input or no piece can achieve %s\n", notation);
+	int matches = find_x_y(chess_board, &move);
+	if (matches > 1) {
+		fprintf(stderr, "ambiguous input: %s\n", notation);
+		return CHESS_ERR;
+	}
+	if (matches < 1) {
+		fprintf(stderr, "no piece can achieve %s\n", notation);
 		return CHESS_ERR;
 	}
 	board tmp_b;
