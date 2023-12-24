@@ -7,15 +7,40 @@
 #define BUF_LEN 64
 
 void print_board(board);
+char ***parse_args(int argc, char *argv[]);
+void free_triple(char ***ptr, size_t size);
 
 struct termios *orig_info = NULL;
 
-int main(void) {
+int main(int argc, char *argv[]) {
 	chess_t game;
 	char buf[BUF_LEN];
 	int state = 0;
 
 	reset(&game);
+
+	if (argc > 1) {
+		char ***notation = parse_args(argc, argv);
+		if (NULL == notation)
+			return 1;
+		for (int i = 0; i < argc / 2; ++i) {
+			if (NULL == notation[i])
+				break;
+			if (game.turn != WHITE)
+				break;
+			if (NULL == notation[i][0])
+				break;
+			if (-1 == move(&game, notation[i][0]))
+				break;
+			if (game.turn != BLACK)
+				break;
+			if (NULL == notation[i][1])
+				break;
+			if (-1 == move(&game, notation[i][1]))
+				break;
+		}
+		free_triple(notation, argc / 2);
+	}
 
 	while (1) {
 		print_board(game.b);
@@ -44,6 +69,44 @@ int main(void) {
 
 	return 0;
 }
+
+void free_triple(char ***ptr, size_t size) {
+	for (int i = 0; i < size; ++i) {
+		free(ptr[i]);
+	}
+	free(ptr);
+}
+
+char ***parse_args(int argc, char *argv[]) {
+	char ***ret = malloc((argc / 2) * sizeof *ret);
+	memset(ret, 0, argc / 2);
+	for (int i = 0; i < argc / 2; ++i) {
+		ret[i] = malloc(2 * sizeof **ret);
+		ret[i][0] = 0;
+		ret[i][1] = 0;
+	}
+	char buf[16];
+	for (int i = 1; i < argc; ++i) {
+		int j = (i - 1) % 3;
+		switch (j) {
+			case 0:
+				snprintf(buf, 16, "%d.", (i - 1) / 3 + 1);
+				if (strcmp(buf, argv[i]) != 0) {
+					free_triple(ret, argc / 2);
+					return NULL;
+				}
+				break;
+			case 1:
+				ret[(i - 1) / 3][0] = argv[i];
+				break;
+			default:
+				ret[(i - 1) / 3][1] = argv[i];
+				break;
+		}
+	}
+	return ret;
+}
+
 
 void print_board(board b) {
 	static const char pieces[2][10][8] = {{" ", " ", "♙", "♖", "♘", "♗", "♕", "♔"},
