@@ -240,29 +240,373 @@ void rm_phantoms(board b, int x, int y) {
 
 }
 
-bool legal_move_exists(board *b, color turn, int kx, int ky) {
+bool legal_move_exists_old(board b, color turn, int kx, int ky, bool check) {
 	board tmp;
-	int kingx = kx, kingy = ky;
 	for (int y = 0; y < BOARD_HEIGHT; y++) {
 		for (int x = 0; x < BOARD_LENGTH; x++) {
-			if ((*b)[y][x].pi == BLANK || (*b)[y][x].c != turn)
+			if (b[y][x].pi == BLANK || b[y][x].c != turn)
 				continue;
 			for (int ty = 0; ty < BOARD_HEIGHT; ty++) {
 				for (int tx = 0; tx < BOARD_LENGTH; tx++) {
-					if ((*b)[ty][tx].c == turn && (*b)[ty][tx].pi != BLANK)
+					if (b[ty][tx].c == turn && b[ty][tx].pi != BLANK)
 						continue;
-					if (!can_move(*b, x, y, tx, ty))
+					if (!can_move(b, x, y, tx, ty))
 						continue;
+					int kingx = kx, kingy = ky;
 					if (kx == x && ky == y) {
 						kingx = tx;
 						kingy = ty;
 					}
-					memcpy(*tmp, **b, sizeof *b);
+					memcpy(*tmp, *b, sizeof(board));
 					_move(tmp, x, y, tx, ty);
 					if (!incheck(tmp, kingx, kingy))
 						return true;
 				}
 			}
+		}
+	}
+	return false;
+}
+
+static bool can_move_minimal(board b, int x, int y, int tx, int ty) {
+	// check if this movement is out of bounds
+	if (out_of_bounds(tx, ty)) {
+		return false;
+	}
+	// check if the target is the same as the starting position
+	if (tx == x && ty == y) {
+		return false;
+	}
+	chess_piece p = b[y][x];
+	// check for friendly fire
+	if (p.c == b[ty][tx].c && (b[ty][tx].pi != BLANK && b[ty][tx].pi != F_PAWN)) {
+		return false;
+	}
+	if (p.pi == BLANK)
+		return false;
+	return true;
+}
+
+/*
+ * returns true if it can keep going, false otherwise
+ */
+static bool pawn_movement(board b, int sign, int x, int y, int *tx, int *ty, int *iterations) {
+	switch (*iterations) {
+		case -1:
+			return false;
+		case 0:
+			*tx = x;
+			*ty = y + sign;
+			break;
+		case 1:
+			*tx = x - 1;
+			*ty = y + sign;
+			break;
+		case 2:
+			*tx = x + 1;
+			*ty = y + sign;
+			break;
+		case 3:
+			if (x != (BOARD_HEIGHT + sign - 1) % 7)
+				return false;
+			*tx = x;
+			*ty = y + 2 * sign;
+			break;
+		default:
+			*iterations = -1;
+			return false;
+	}
+	*iterations = *iterations + 1;
+	return can_move_minimal(b, x, y, *tx, *ty);
+}
+
+static bool diag_movement(board b, int dir, int x, int y, int *tx, int *ty, int *iterations) {
+	if (dir > 3 || dir < 0 || *iterations < 0) {
+		*iterations = -1;
+		return false;
+	}
+	int xdir = (dir / 2) * 2 - 1;
+	int ydir = (((dir + 1) % 4) / 2) * 2 - 1;
+	*tx = x + (*iterations + 1) * xdir;
+	*ty = y + (*iterations + 1) * ydir;
+	if (!can_move_minimal(b, x, y, *tx, *ty)) {
+		return false;
+	}
+	*iterations = *iterations + 1;
+	return true;
+}
+
+static bool cross_movement(board b, int dir, int x, int y, int *tx, int *ty, int *iterations) {
+	if (dir > 3 || dir < 0 || *iterations < 0) {
+		*iterations = -1;
+		return false;
+	}
+	int xdir, ydir;
+	switch (dir) {
+		case 0:	// up
+			xdir = 0;
+			ydir = 1;
+			break;
+		case 1:	// right
+			xdir = 1;
+			ydir = 0;
+			break;
+		case 2:	// down 
+			xdir = 0;
+			ydir = -1;
+			break;
+		case 3:	// left
+			xdir = -1;
+			ydir = 0;
+			break;
+		default:
+			*iterations = -1;
+			return false;
+	}
+	*tx = x + xdir * (*iterations + 1);
+	*ty = y + ydir * (*iterations + 1);
+	if (!can_move_minimal(b, x, y, *tx, *ty)) {
+		return false;
+	}
+	*iterations = *iterations + 1;
+	return true;
+}
+
+static bool horse_movement(board b, int dir, int x, int y, int *tx, int *ty, int *iterations) {
+	if (*iterations > 7 || *iterations < 0) {
+		*iterations = -1;
+		return false;
+	}
+	int i = *iterations;
+	int ydir = (((i / 4) * -2) + 1) * ((((i % 2) + (i / 2)) % 2) + 1);
+	i = (*iterations + 2) % 8;
+	int xdir = (((i / 4) * -2) + 1) * ((((i % 2) + (i / 2)) % 2) + 1);
+	*tx = x + xdir;
+	*ty = y + ydir;
+	*iterations = *iterations + 1;
+	if (!can_move_minimal(b, x, y, *tx, *ty)) {
+		return false;
+	}
+	return true;
+}
+
+/*
+ * returns true if it can keep going, false if its options have been exhasted
+ */
+bool check_piece_movement(board b, chess_piece p, int *dir, int x, int y, int *tx, int *ty, int *iterations) {
+	bool ret = false;
+	switch (p.pi) {
+		case PAWN:
+			int sign = (p.c == WHITE) ? -1 : 1;
+			return pawn_movement(b, sign, x, y, tx, ty, iterations);
+		case ROOK:
+			ret = cross_movement(b, *dir, x, y, tx, ty, iterations);
+			break;
+		case KNIGHT:
+			ret = horse_movement(b, *dir, x, y, tx, ty, iterations);
+			break;
+		case BISHOP:
+			ret = diag_movement(b, *dir, x, y, tx, ty, iterations);
+			break;
+		case QUEEN:
+			if (*dir % 2 == 0) {
+				ret = cross_movement(b, *dir / 2, x, y, tx, ty, iterations);
+			} else {
+				ret = diag_movement(b, (*dir - 1) / 2, x, y, tx, ty, iterations);
+			}
+			break;
+		case KING:
+			if (*iterations > 0) {
+				*iterations = 0;
+				*dir = *dir + 1;
+			}
+			if (*dir % 2 == 0) {
+				ret = cross_movement(b, *dir / 2, x, y, tx, ty, iterations);
+			} else {
+				ret = diag_movement(b, (*dir - 1) / 2, x, y, tx, ty, iterations);
+			}
+			break;
+		default:
+			*iterations = -1;
+			return false;
+	}
+	if (*iterations < 0)
+		return false;
+	if (!ret && p.pi != PAWN && p.pi != KNIGHT) {
+		*iterations = 0;
+		*dir = *dir + 1;
+	}
+	return ret;
+}
+
+static bool all_movements(board b, board tmp, int x, int y, int kx, int ky) {
+	int iterations = 0;
+	int dir = 0;
+	while (1) {
+		int tx, ty;
+		chess_piece p = b[y][x];
+		while (!check_piece_movement(b, p, &dir, x, y, &tx, &ty, &iterations) && 
+				iterations >= 0);
+		if (iterations < 0)
+			return false;
+		memcpy(*tmp, *b, sizeof(board));
+		_move(tmp, x, y, tx, ty);
+		int tkx = kx, tky = ky;
+		if (KING == p.pi) {
+			tkx = tx;
+			tky = ty;
+		}
+		if (!incheck(tmp, tkx, tky))
+			return true;
+	}
+}
+
+static size_t what_can_attack_me(board b, color turn, int x, int y, int enemies[16][2]) {
+	size_t e = 0;
+	// check for pawns
+	// only 2 places to check for pawns
+	int sign = turn == BLACK ? -1 : 1;
+	int py = y - sign;
+	int p1x = x - 1;
+	int p2x = x + 1;
+	if (!out_of_bounds(p1x, py) && PAWN == b[py][p1x].pi && turn != b[py][p1x].c) {
+		enemies[e][0] = p1x;
+		enemies[e][1] = py;
+		e++;
+	}
+	if (!out_of_bounds(p2x, py) && PAWN == b[py][p2x].pi && turn != b[py][p2x].c) {
+		enemies[e][0] = p2x;
+		enemies[e][1] = py;
+		e++;
+	}
+	// check for horses
+	int iterations = 0;
+	int dir = 0;
+	do {
+		int tx, ty;
+		if (!check_piece_movement(b, 
+					(chess_piece) { .pi = KNIGHT, .c = turn }, 
+					&dir, 
+					x, y,
+					&tx, &ty, 
+					&iterations))
+			// if a hypothetical knight on our side in this position can't move to a
+			// position, that position is not worth investigating, since
+			// that position is either out of bounds or our own piece
+			continue;
+		if (KNIGHT == b[ty][tx].pi) {
+			enemies[e][0] = tx;
+			enemies[e][1] = ty;
+			e++;
+		}
+	} while (iterations >= 0);
+	// check for everything else with a queen
+	iterations = 0;
+	dir = 0;
+	do {
+		int tx, ty;
+		if (!check_piece_movement(b, 
+					(chess_piece) { .pi = QUEEN, .c = turn }, 
+					&dir, 
+					x, y,
+					&tx, &ty, 
+					&iterations))
+			// if a hypothetical queen on our side in this position can't move to a
+			// position, that position is not worth investigating, since
+			// that position is either out of bounds or our own piece
+			continue;
+		if (BLANK != b[ty][tx].pi && KNIGHT != b[ty][tx].pi && PAWN != b[ty][tx].pi && KING != b[ty][tx].pi) {
+			enemies[e][0] = tx;
+			enemies[e][1] = ty;
+			e++;
+		}
+	} while (iterations >= 0);
+	return e;
+}
+
+static void iterate_line(int *x, int *y, int tx, int ty, int iterations) {
+	if (*x == tx && *y == ty)
+		return;
+	if (*x != tx)
+		*x += (*x > tx ? -1 : 1) * iterations;
+	if (*y != ty)
+		*y += (*y > ty ? -1 : 1) * iterations;
+}
+
+static bool try_check(board b, board tmp, int x, int y, int tx, int ty, int kx, int ky) {
+	if (kx == x && ky == y) {
+		kx = tx;
+		ky = ty;
+	}
+	if (!can_move(b, x, y, tx, ty))
+		return true;
+	memcpy(*tmp, *b, sizeof(board));
+	_move(tmp, x, y, tx, ty);
+	return incheck(tmp, kx, ky);
+}
+
+bool legal_move_exists(board b, color turn, int kx, int ky, bool check) {
+	board tmp;
+	if (check) {
+		// check all of the king's movements if they get him out of check
+		if (all_movements(b, tmp, kx, ky, kx, ky))
+			return true;
+		// That didn't work, find out what is putting the king in check
+		int enemigos[16][2];
+		size_t q_enemigos = what_can_attack_me(b, turn, kx, ky, enemigos);
+		// since we know the layout of enemigos, we can check the pawns and knights first
+		// the only way to stop a pawn or knight is by capturing them, so 
+		// see if any of our pieces can take one of these pieces
+		// may as well check all the other ones as well
+		for (int y = 0; y < BOARD_HEIGHT; ++y) {
+			for (int x = 0; x < BOARD_LENGTH; ++x) {
+				if (BLANK == b[y][x].pi)
+					continue;
+				if (b[y][x].c != turn)
+					continue;
+				for (int i = 0; i < q_enemigos; ++i) {
+					// see if it can take any of the enemigos
+					// if it can, see if we're still in check
+					if (!try_check(b, tmp, x, y, enemigos[i][0], enemigos[i][1], kx, ky))
+						return true;
+					// better luck next time
+				}
+			}
+		}
+		// no luck, try and block one of the enemigos instead
+		for (int i = 0; i < q_enemigos; ++i) {
+			int tx = enemigos[i][0];
+			int ty = enemigos[i][1];
+			if (KNIGHT == b[ty][tx].pi || PAWN == b[ty][tx].pi)
+				// skip pawns and knights that can't be blocked
+				continue;
+			for (int y = 0; y < BOARD_HEIGHT; ++y) {
+				for (int x = 0; x < BOARD_LENGTH; ++x) {
+					if (BLANK == b[y][x].pi)
+						continue;
+					if (b[y][x].c != turn)
+						continue;
+					int tmpy = y;
+					int tmpx = x;
+					int iterations = 1;
+					do {
+						iterate_line(&tmpx, &tmpy, tx, ty, iterations++);
+						if (!try_check(b, tmp, x, y, tmpx, tmpy, kx, ky))
+							return true;
+					} while (tmpy != ty && tmpx != tx && !out_of_bounds(tmpx, tmpy));
+				}
+			}
+		}
+		return false;
+	}
+	for (int y = 0; y < BOARD_HEIGHT; ++y) {
+		for (int x = 0; x < BOARD_LENGTH; ++x) {
+			if (BLANK == b[y][x].pi)
+				continue;
+			if (b[y][x].c != turn)
+				continue;
+			if (all_movements(b, tmp, x, y, kx, ky))
+				return true;
 		}
 	}
 	return false;
@@ -485,7 +829,7 @@ char move(chess_t *chess_board, char *notation) {
 		? turn
 		: NOCOLOR;
 	char ret = CHESS_NORMAL;
-	if (legal_move_exists(&tmp_b, turn, chess_board->kpos[turn][0], chess_board->kpos[turn][1])) {
+	if (legal_move_exists(tmp_b, turn, chess_board->kpos[turn][0], chess_board->kpos[turn][1], check != NOCOLOR)) {
 		// if the user says this move results in mate, return error
 		if (move.flags & MOVE_MATE)
 			return CHESS_ERR;
