@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define CHESS_ERR -1
 #define CHESS_NORMAL 0
@@ -15,7 +16,7 @@ typedef enum {
 	MOVE_MATE    = 0x2,
 	MOVE_PROMOTE = 0x4,
 	MOVE_CASTLE  = 0x8,
-	MOVE_CAPTURE = 0x16
+	MOVE_CAPTURE = 0x10
 } move_flags;
 
 typedef struct {
@@ -27,9 +28,9 @@ typedef struct {
 static void print_piece(chess_piece);
 static void rm_phantoms(board, int, int);
 
-static int abs(int in) {
-	return (in < 0) ? -in : in;
-}
+//static int abs(int in) {
+//	return (in < 0) ? -in : in;
+//}
 
 static bool out_of_bounds(int x, int y) {
 	return x < 0 || y < 0 || x >= BOARD_LENGTH || y >= BOARD_HEIGHT;
@@ -170,6 +171,25 @@ static chess_p parse_piece(char in) {
 		default:
 			fprintf(stderr, "character %c does not represent a piece\n", in);
 			return  BLANK;
+	}
+}
+
+static char *unparse_piece(chess_p p) {
+	switch (p) {
+		case PAWN:
+			return "";
+		case ROOK:
+			return "R";
+		case KNIGHT:
+			return "N";
+		case BISHOP:
+			return "B";
+		case QUEEN:
+			return "Q";
+		case KING:
+			return "K";
+		default:
+			return "";
 	}
 }
 
@@ -502,7 +522,7 @@ static bool try_check(board b, board tmp, int x, int y, int tx, int ty, int kx, 
 	return incheck(tmp, kx, ky);
 }
 
-bool legal_move_exists(board b, color turn, int kx, int ky, bool check) {
+static bool legal_move_exists(board b, color turn, int kx, int ky, bool check) {
 	board tmp;
 	if (check) {
 		// check all of the king's movements if they get him out of check
@@ -668,23 +688,25 @@ static bool parse_movement(char *notation, color turn, move_t *move, char *promo
 	return true;
 }
 
-static int find_x_y(chess_t *chess_board, move_t *move) {
+static int find_x_y(chess_t *chess, move_t *move, bool *kind) {
 	if (move->x > -1 && move->y > -1)
 		return 1;
 	int matches = 0;
 	for (int i = 0; i < BOARD_HEIGHT; ++i) {
 		for (int j = 0; j < BOARD_LENGTH; ++j) {
 			// check if this piece matches the piece we are trying to move
-			if (!((chess_board->b)[i][j].pi == move->piece &&
-			      (chess_board->b)[i][j].c == chess_board->turn))
+			if (!(chess->b[i][j].pi == move->piece &&
+			      chess->b[i][j].c == chess->turn))
 				continue;
 			// check if this piece can move to the position we are trying to move to 
-			if (!can_move(chess_board->b, j, i, move->tx, move->ty))
+			if (!can_move(chess->b, j, i, move->tx, move->ty))
 				continue;
 			// check if this piece matches given position constraints, if any were given
 			if ((move->x > -1 && j != move->x) || (move->y > -1 && i != move->y))
 				continue;
 			matches++;
+			if (kind != NULL && matches > 1 && !(matches > 2))
+				*kind = move->x == j;
 			// assume this is the right piece
 			move->x = j;
 			move->y = i;
@@ -724,6 +746,8 @@ static bool test_move(chess_t *chess_board, move_t *move, board buf, int kcopy[2
 	bool taken = _move(buf, move->x, move->y, move->tx, move->ty);
 	if ((move->flags & MOVE_CAPTURE) && !taken)
 		return false;
+	if (taken)
+		move->flags |= MOVE_CAPTURE;
 	memcpy(kcopy, chess_board->kpos[chess_board->turn], 2 * sizeof *kcopy);
 	castle_state cstate = 0;
 	switch (move->piece) {
@@ -757,6 +781,70 @@ static bool test_move(chess_t *chess_board, move_t *move, board buf, int kcopy[2
 	return true;
 }
 
+size_t unparse_movement(char buf[10], move_t *move, chess_t *chess) {
+	char *piece = unparse_piece(move->piece);
+	int x = move->x;
+	int y = move->y;
+	int tx = move->tx;
+	int ty = move->ty;
+	move->x = -1;
+	move->y = -1;
+	bool kind = false;
+	int matches = find_x_y(chess, move, &kind);
+	char d_rank = BOARD_HEIGHT - y + '0';
+	char d_file = 'a' + x;
+	char t_rank = BOARD_HEIGHT - ty + '0';
+	char t_file = 'a' + tx;
+	if (matches == 1) {
+		d_rank = 0;
+		d_file = 0;
+	} else if (matches == 2) {
+		if (kind) {
+			// xs match -> on same file, provide rank information
+			d_file = 0;
+		} else {
+			// ys match -> on same rank, provide file
+			d_rank = 0;
+		}
+	}
+	char disambig[3];
+	snprintf(disambig, 3, "%c%c", d_file, d_rank);
+	if (0 == *disambig) {
+		disambig[0] = disambig[1];
+		disambig[1] = 0;
+	}
+	char take[2];
+	snprintf(take, 2, "%c", move->flags & MOVE_CAPTURE ? 'x' : '\0');
+	char end[2];
+	snprintf(end, 2, "%c", (move->flags & MOVE_CHECK) ? '+' : ((move->flags & MOVE_MATE) ? '#' : '\0'));
+	// put everything together
+	return snprintf(buf, 10, "%s%s%s%c%c%s ", piece, disambig, take, t_file, t_rank, end);
+}
+
+unsigned int ensure_space(char **arr, unsigned int cur_size, unsigned int req_size) {
+	if (cur_size <= req_size)
+		return cur_size;
+	while ((cur_size *= 2) < req_size);
+	*arr = realloc(*arr, cur_size);
+	return cur_size;
+}
+
+void append_history(chess_t *chess, move_t *move) {
+	char buf[10];
+	size_t move_len = unparse_movement(buf, move, chess);
+	chess->h_len = ensure_space(&chess->history, 
+			chess->h_len, 
+			chess->h_end + move_len + (WHITE == chess->turn) ? 8 : 0);
+	if (WHITE == chess->turn) {
+		char num[8];
+		int num_size = snprintf(num, 8, "%u. ", chess->moves / 2 + 1);
+		memcpy(chess->history + chess->h_end - 1, num, num_size + 1);
+		chess->h_end += num_size;
+	}
+	memcpy(chess->history + chess->h_end - 1, buf, move_len + 1);
+	chess->h_end += move_len;
+}
+
 // returns -1 if error,
 // 0 if normal
 // 1 if in check
@@ -768,7 +856,7 @@ char move(chess_t *chess_board, char *notation) {
 		fprintf(stderr, "notation syntax error: %s\n", notation);
 		return CHESS_ERR;
 	}
-	int matches = find_x_y(chess_board, &move);
+	int matches = find_x_y(chess_board, &move, NULL);
 	if (matches > 1) {
 		fprintf(stderr, "ambiguous input: %s\n", notation);
 		return CHESS_ERR;
@@ -796,14 +884,22 @@ char move(chess_t *chess_board, char *notation) {
 		// if the user says this move results in check and it does not, return error
 		if (NOCOLOR == check && move.flags & MOVE_CHECK)
 			return CHESS_ERR;
-		if (NOCOLOR != check)
+		if (NOCOLOR != check) {
 			ret = CHESS_CHECK;
+			move.flags |= MOVE_CHECK;
+		}
 	} else {
 		// no legal move exists
 		if (NOCOLOR == check && move.flags & MOVE_MATE)
 			return CHESS_ERR;
 		ret = (NOCOLOR == check) ? CHESS_STALE : CHESS_MATE;
+		if (CHESS_MATE == ret)
+			move.flags |= MOVE_MATE;
 	}
+
+	// TODO record this move
+	chess_board->moves++;
+	append_history(chess_board, &move);
 
 	memcpy(*chess_board->b, *tmp_b, sizeof chess_board->b);
 	chess_board->kpos[chess_board->turn][0] = kcopy[0];
@@ -811,6 +907,8 @@ char move(chess_t *chess_board, char *notation) {
 	chess_board->castle &= ~cstate;
 	chess_board->turn = turn;
 	chess_board->check = check;
+
+
 	return ret;
 }
 
@@ -824,7 +922,11 @@ void reset(chess_t *chess_board) {
 	chess_board->kpos[0][1] = 7;
 	chess_board->kpos[1][0] = 4;
 	chess_board->kpos[1][1] = 0;
-
+	chess_board->moves = 0;
+	chess_board->h_len = 16;
+	chess_board->h_end = 1;
+	chess_board->history = malloc(chess_board->h_len * sizeof *(chess_board->history));
+	memset(chess_board->history, 0, chess_board->h_len * sizeof *(chess_board->history));
 }
 
 char *print_color(color c) {
