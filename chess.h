@@ -60,11 +60,28 @@ typedef struct {
 	int kpos[2][2];
 	color turn, check;
 	castle_state castle;
+	unsigned int moves;
+	unsigned int h_len, h_end;
+	char *history;
 } chess_t;
+
+typedef enum {
+	CHESS_ERR = -16,
+	CHESS_ERR_PROMISE = -5,
+	CHESS_ERR_ILLEGAL = -4,
+	CHESS_ERR_NOAVAIL = -3,
+	CHESS_ERR_AMBIG = -2,
+	CHESS_ERR_PARSE = -1,
+	CHESS_NORMAL = 0,
+	CHESS_CHECK = 1,
+	CHESS_MATE = 2,
+	CHESS_STALE = 3,
+	CHESS_END = 2,
+} chess_return;
 
 //void chess_init(chess_t*);
 void reset(chess_t*);
-char move(chess_t*, char *);
+chess_return move(chess_t*, char *);
 char *print_color(color);
 
 //extern color chess_turn;

@@ -15,7 +15,7 @@ struct termios *orig_info = NULL;
 int main(int argc, char *argv[]) {
 	chess_t game;
 	char buf[BUF_LEN];
-	int state = 0;
+	chess_return state = 0;
 
 	reset(&game);
 
@@ -44,11 +44,12 @@ int main(int argc, char *argv[]) {
 
 	while (1) {
 		print_board(game.b);
-		if (state > 1) {
+		if (state >= CHESS_END) {
 			printf("\n");
 			break;
 		}
-		printf(         "                                \033[32D\r"
+		printf(         "                                                                                "
+				"\033[80D\r"
 				//"                                \033[32D\033[1A\r"
 				"%s's move: ", 
 				print_color(game.turn));
@@ -56,8 +57,40 @@ int main(int argc, char *argv[]) {
 			break;
 		strtok(buf, "\n");
 		// buf has the move the player wants to make
-		printf("                                \033[32D\r");
+		printf("                                                                                "
+				"\033[80D\r");
 		state = move(&game, buf);
+		switch (state) {
+			case CHESS_ERR:
+				printf("unknown error occurred.\n");
+				break;
+			case CHESS_ERR_PROMISE:
+				printf("Move %s included parts that could not be achieved\n", buf);
+				break;
+			case CHESS_ERR_ILLEGAL:
+				printf("%s is an illegal move\n", buf);
+				break;
+			case CHESS_ERR_NOAVAIL:
+				printf("No piece is able to achieve %s\n", buf);
+				break;
+			case CHESS_ERR_AMBIG:
+				printf("%s is too ambiguous\n", buf);
+				break;
+			case CHESS_ERR_PARSE:
+				printf("%s is not a valid move\n", buf);
+				break;
+			case CHESS_CHECK:
+				printf("%s in check!\n", print_color(game.check));
+				break;
+			case CHESS_MATE:
+				printf("%s wins by checkmate!\n", print_color(swith(game.check)));
+				break;
+			case CHESS_STALE:
+				printf("Game ends in stalemate\n");
+				break;
+			default:
+				break;
+		}
 #ifndef DEBUG
 		if (state)
 			printf("\033[1A");
@@ -66,6 +99,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	printf("\n");
+	printf("%s\n", game.history);
 
 	return 0;
 }

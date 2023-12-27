@@ -849,28 +849,28 @@ void append_history(chess_t *chess, move_t *move) {
 // 0 if normal
 // 1 if in check
 // 2 if checkmate
-char move(chess_t *chess_board, char *notation) {
+chess_return move(chess_t *chess_board, char *notation) {
 	move_t move;
 	char *promote = NULL;
 	if (!parse_movement(notation, chess_board->turn, &move, promote)) {
-		fprintf(stderr, "notation syntax error: %s\n", notation);
-		return CHESS_ERR;
+		//fprintf(stderr, "notation syntax error: %s\n", notation);
+		return CHESS_ERR_PARSE;
 	}
 	int matches = find_x_y(chess_board, &move, NULL);
 	if (matches > 1) {
-		fprintf(stderr, "ambiguous input: %s\n", notation);
-		return CHESS_ERR;
+		//fprintf(stderr, "ambiguous input: %s\n", notation);
+		return CHESS_ERR_AMBIG;
 	}
 	if (matches < 1) {
-		fprintf(stderr, "no piece can achieve %s\n", notation);
-		return CHESS_ERR;
+		//fprintf(stderr, "no piece can achieve %s\n", notation);
+		return CHESS_ERR_NOAVAIL;
 	}
 	board tmp_b;
 	castle_state cstate;
 	int kcopy[2];
 	if (!test_move(chess_board, &move, tmp_b, kcopy, promote, &cstate)) {
-		fprintf(stderr, "unable to make %s\n", notation);
-		return CHESS_ERR;
+		//fprintf(stderr, "unable to make %s\n", notation);
+		return CHESS_ERR_ILLEGAL;
 	}
 	color turn  = swith(chess_board->turn);
 	color check = incheck(tmp_b, chess_board->kpos[turn][0], chess_board->kpos[turn][1])
@@ -880,10 +880,10 @@ char move(chess_t *chess_board, char *notation) {
 	if (legal_move_exists(tmp_b, turn, chess_board->kpos[turn][0], chess_board->kpos[turn][1], check != NOCOLOR)) {
 		// if the user says this move results in mate, return error
 		if (move.flags & MOVE_MATE)
-			return CHESS_ERR;
+			return CHESS_ERR_PROMISE;
 		// if the user says this move results in check and it does not, return error
 		if (NOCOLOR == check && move.flags & MOVE_CHECK)
-			return CHESS_ERR;
+			return CHESS_ERR_PROMISE;
 		if (NOCOLOR != check) {
 			ret = CHESS_CHECK;
 			move.flags |= MOVE_CHECK;
@@ -891,7 +891,7 @@ char move(chess_t *chess_board, char *notation) {
 	} else {
 		// no legal move exists
 		if (NOCOLOR == check && move.flags & MOVE_MATE)
-			return CHESS_ERR;
+			return CHESS_ERR_PROMISE;
 		ret = (NOCOLOR == check) ? CHESS_STALE : CHESS_MATE;
 		if (CHESS_MATE == ret)
 			move.flags |= MOVE_MATE;
@@ -907,7 +907,6 @@ char move(chess_t *chess_board, char *notation) {
 	chess_board->castle &= ~cstate;
 	chess_board->turn = turn;
 	chess_board->check = check;
-
 
 	return ret;
 }
