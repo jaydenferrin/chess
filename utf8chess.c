@@ -3,10 +3,11 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
+#include <stdbool.h>
 
 #define BUF_LEN 64
 
-void print_board(board);
+void print_board(board, bool);
 char ***parse_args(int argc, char *argv[]);
 void free_triple(char ***ptr, size_t size);
 
@@ -43,7 +44,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	while (1) {
-		print_board(game.b);
+		print_board(game.b, game.turn == BLACK);
 		if (state >= CHESS_END) {
 			printf("\n");
 			break;
@@ -142,15 +143,16 @@ char ***parse_args(int argc, char *argv[]) {
 }
 
 
-void print_board(board b) {
+void print_board(board b, bool flipped) {
 	static const char pieces[2][10][8] = {{" ", " ", "♙", "♖", "♘", "♗", "♕", "♔"},
 					      {" ", " ", "♟", "♜", "♞", "♝", "♛", "♚"}};
 	static const int colors[] = {47, 44};
-	for (int i = 0; i < BOARD_LENGTH; ++i) {
-		printf("%d ", BOARD_LENGTH - i);
-		for (int j = 0; j < BOARD_HEIGHT; ++j) {
-			int p = b[i][j].pi + 2;
-			int c = b[i][j].c;
+	for (int i = 0; i < BOARD_HEIGHT; ++i) {
+		printf("%d ", flipped ? i + 1 : BOARD_HEIGHT - i);
+		for (int j = 0; j < BOARD_LENGTH; ++j) {
+			chess_piece pi = b[flipped ? BOARD_HEIGHT - i - 1 : i][flipped ? BOARD_LENGTH - j - 1 : j];
+			int p = pi.pi + 2;
+			int c = pi.c;
 			if (c < 0) {
 				c = 0;
 				p = 0;
@@ -161,6 +163,6 @@ void print_board(board b) {
 	}
 	printf("  ");
 	for (int i = 0; i < BOARD_LENGTH; ++i)
-		printf("%c ", 'a' + i);
+		printf("%c ", flipped ? 'h' - i : 'a' + i);
 	printf("\n");
 }
