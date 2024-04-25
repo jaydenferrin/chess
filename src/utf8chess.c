@@ -102,6 +102,8 @@ int main(int argc, char *argv[]) {
 	printf("\n");
 	printf("%s\n", game.history);
 
+	cleanup (&game);
+
 	return 0;
 }
 

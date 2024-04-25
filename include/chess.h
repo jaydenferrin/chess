@@ -83,6 +83,7 @@ typedef enum {
 void reset(chess_t*);
 chess_return move(chess_t*, char *);
 char *print_color(color);
+void cleanup (chess_t*);
 
 //extern color chess_turn;
 

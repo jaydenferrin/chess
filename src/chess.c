@@ -928,6 +928,11 @@ void reset(chess_t *chess_board) {
 	memset(chess_board->history, 0, chess_board->h_len * sizeof *(chess_board->history));
 }
 
+void cleanup (chess_t *chess_board)
+{
+	free (chess_board->history);
+}
+
 char *print_color(color c) {
 	switch (c) {
 		case WHITE:
